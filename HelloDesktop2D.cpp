@@ -36,6 +36,72 @@ int APIENTRY wWinMain(
     return (int) msg.wParam;
 }
 
+ComPtr<HelloWorldWindow> HelloWorldWindow::Create(DXDevice* device, HINSTANCE hInstance, int showCommand)
+{
+    wchar_t const className[] = L"HelloWorldWindow";
+
+    // Register the window class on the first call.
+    static bool isClassRegistered = false;
+    if (!isClassRegistered)
+    {
+        WNDCLASSEXW wcex = {};
+
+        wcex.cbSize = sizeof(WNDCLASSEX);
+
+        wcex.style = CS_HREDRAW | CS_VREDRAW;
+        wcex.lpfnWndProc = WindowProc;
+        //wcex.cbClsExtra = 0;
+        //wcex.cbWndExtra = 0;
+        wcex.hInstance = hInstance;
+        wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_HELLODESKTOP2D));
+        wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+        //wcex.lpszMenuName = nullptr;
+        wcex.lpszClassName = className;
+        wcex.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_SMALL));
+
+        ATOM classAtom = RegisterClassExW(&wcex);
+        if (classAtom == 0)
+        {
+            ThrowLastError();
+        }
+
+        isClassRegistered = true;
+    }
+
+    // Get the window title.
+    constexpr uint32_t maxTitle = 100;
+    wchar_t appTitle[maxTitle];
+    LoadStringW(hInstance, IDS_APP_TITLE, appTitle, maxTitle);
+
+    // Create the window.
+    HWND hwnd = CreateWindowW(
+        className,
+        appTitle,
+        WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT, 0,
+        CW_USEDEFAULT, 0,
+        nullptr,
+        nullptr,
+        hInstance,
+        nullptr
+    );
+
+    if (hwnd == nullptr)
+    {
+        ThrowLastError();
+    }
+
+    // Show the window, so it has a size when we create the window context.
+    ShowWindow(hwnd, showCommand);
+
+    ComPtr<HelloWorldWindow> windowContext{ new HelloWorldWindow{ device, hwnd } };
+
+    UpdateWindow(hwnd);
+
+    return windowContext;
+}
+
 HelloWorldWindow::HelloWorldWindow(DXDevice* device, HWND hwnd) :
     DXWindowContext{ device, hwnd }
 {
@@ -87,69 +153,6 @@ HelloWorldWindow::HelloWorldWindow(DXDevice* device, HWND hwnd) :
 
         m_textLines.push_back(std::move(textLine));
     }
-}
-
-ComPtr<HelloWorldWindow> HelloWorldWindow::Create(DXDevice* device, HINSTANCE hInstance, int showCommand)
-{
-    wchar_t const className[] = L"HelloWorldWindow";
-
-    static bool isClassRegistered = false;
-
-    if (!isClassRegistered)
-    {
-        WNDCLASSEXW wcex = {};
-
-        wcex.cbSize = sizeof(WNDCLASSEX);
-
-        wcex.style = CS_HREDRAW | CS_VREDRAW;
-        wcex.lpfnWndProc = WindowProc;
-        //wcex.cbClsExtra = 0;
-        //wcex.cbWndExtra = 0;
-        wcex.hInstance = hInstance;
-        wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_HELLODESKTOP2D));
-        wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
-        wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-        //wcex.lpszMenuName = nullptr;
-        wcex.lpszClassName = className;
-        wcex.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_SMALL));
-
-        ATOM classAtom = RegisterClassExW(&wcex);
-        if (classAtom == 0)
-        {
-            ThrowLastError();
-        }
-
-        isClassRegistered = true;
-    }
-
-    constexpr uint32_t maxTitle = 100;
-    wchar_t appTitle[maxTitle];
-    LoadStringW(hInstance, IDS_APP_TITLE, appTitle, maxTitle);
-
-    HWND hwnd = CreateWindowW(
-        className,
-        appTitle, 
-        WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, 0, 
-        CW_USEDEFAULT, 0, 
-        nullptr, 
-        nullptr, 
-        hInstance, 
-        nullptr
-    );
-
-    if (hwnd == nullptr)
-    {
-        ThrowLastError();
-    }
-
-    ShowWindow(hwnd, showCommand);
-
-    ComPtr<HelloWorldWindow> windowContext{ new HelloWorldWindow{ device, hwnd } };
-
-    UpdateWindow(hwnd);
-
-    return windowContext;
 }
 
 LRESULT CALLBACK HelloWorldWindow::WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
