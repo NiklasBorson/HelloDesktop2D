@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 #include "HelloDesktop2D.h"
 
 wchar_t const g_windowClass[] = L"wc_HelloDesktop2D";
@@ -135,7 +135,7 @@ HelloWorldWindow::HelloWorldWindow(DXDevice* device, HWND hwnd) :
 
     HR(textFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP));
 
-    static wchar_t const text[] = L"Hello World!";
+    static wchar_t const text[] = L"Hello World! 😀";
 
     HR(dwriteFactory->CreateTextLayout(
         text,
@@ -158,6 +158,7 @@ void HelloWorldWindow::RenderContent()
     context->DrawTextLayout(
         D2D1_POINT_2F{ 10.0f, 10.0f },
         m_textLayout.Get(),
-        m_textBrush.Get()
+        m_textBrush.Get(),
+        D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT
         );
 }

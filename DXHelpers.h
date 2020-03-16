@@ -218,6 +218,11 @@ public:
     static void OnResize(HWND hwnd) noexcept;
     static void OnDpiChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) noexcept;
 
+    static DXWindowContext* GetThis(HWND hwnd) noexcept
+    {
+        return reinterpret_cast<DXWindowContext*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+    }
+
     // Getters.
     uint32_t GetPixelWidth() const noexcept
     {
@@ -278,11 +283,6 @@ private:
     void InitWindowSize() noexcept;
 
     void ResizeSwapChain();
-
-    bool IsInitialized() const noexcept
-    {
-        return m_d2dContext != nullptr;
-    }
 
     void ResetWindow() noexcept;
     void ResetDevice() noexcept;

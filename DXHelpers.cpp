@@ -141,7 +141,7 @@ DXWindowContext::DXWindowContext(DXDevice* device, HWND hwnd) noexcept :
 {
     InitWindowSize();
 
-    SetWindowLongPtr(hwnd, GWL_USERDATA, reinterpret_cast<UINT_PTR>(this));
+    SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<UINT_PTR>(this));
 }
 
 void DXWindowContext::InitWindowSize() noexcept
@@ -154,7 +154,7 @@ void DXWindowContext::InitWindowSize() noexcept
 
 void DXWindowContext::OnResize(HWND hwnd) noexcept
 {
-    auto context = reinterpret_cast<DXWindowContext*>(GetWindowLongPtr(hwnd, GWL_USERDATA));
+    auto context = GetThis(hwnd);
     if (context != nullptr)
     {
         try
@@ -170,7 +170,7 @@ void DXWindowContext::OnResize(HWND hwnd) noexcept
 
 void DXWindowContext::OnDpiChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) noexcept
 {
-    auto context = reinterpret_cast<DXWindowContext*>(GetWindowLongPtr(hwnd, GWL_USERDATA));
+    auto context = GetThis(hwnd);
     if (context != nullptr)
     {
         try
@@ -243,8 +243,11 @@ void DXWindowContext::ResetDevice() noexcept
 
 void DXWindowContext::EnsureInitialized()
 {
-    if (IsInitialized())
+    // If the D2D context is already initialized, then just make sure all
+    // D2D resources are initialized.
+    if (m_d2dContext != nullptr)
     {
+        m_resourceList.EnsureInitialized(m_d2dContext.Get());
         return;
     }
 
@@ -352,7 +355,7 @@ void DXWindowContext::Paint()
 
 void DXWindowContext::OnPaint(HWND hwnd) noexcept
 {
-    auto context = reinterpret_cast<DXWindowContext*>(GetWindowLongPtr(hwnd, GWL_USERDATA));
+    auto context = GetThis(hwnd);
     if (context != nullptr)
     {
         try
