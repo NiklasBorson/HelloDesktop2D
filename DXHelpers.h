@@ -259,6 +259,11 @@ public:
         return m_d2dContext.Get();
     }
 
+    static void ForceDpi(uint16_t dpi) noexcept
+    {
+        m_forceDpi = dpi;
+    }
+
 protected:
 
     // Derived class calls AddResource to ensure device-dependent objects
@@ -297,6 +302,8 @@ private:
     uint32_t m_pixelWidth = 1;
     uint32_t m_pixelHeight = 1;
     uint32_t m_dpi = 96;
+
+    static uint32_t m_forceDpi;
 
     ComPtr<IDXGISwapChain> m_swapChain;
     ComPtr<ID2D1DeviceContext6> m_d2dContext;

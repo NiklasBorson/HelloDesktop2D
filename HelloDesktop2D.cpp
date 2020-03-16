@@ -15,6 +15,12 @@ int APIENTRY wWinMain(
         ThrowLastError();
     }
 
+    // Process command-line option to force 96 DPI.
+    if (wcscmp(lpCmdLine, L"-96") == 0)
+    {
+        DXWindowContext::ForceDpi(96);
+    }
+
     // Create the device and the main window.
     ComPtr<DXDevice> dxDevice{ new DXDevice{} };
     auto windowContext = HelloWorldWindow::Create(dxDevice.Get(), hInstance, nCmdShow);

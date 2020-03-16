@@ -5,10 +5,6 @@
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 
-// Set this to a nonzero value to force the DPI to a specific value instead of
-// using the monitor DPI.
-constexpr uint16_t g_forceDpi = 96;
-
 [[noreturn]]
 void WinException::Throw(HRESULT hr)
 {
@@ -138,10 +134,12 @@ void DXDevice::EnsureInitialized()
     m_generation++;
 }
 
+uint32_t DXWindowContext::m_forceDpi = 0;
+
 DXWindowContext::DXWindowContext(DXDevice* device, HWND hwnd) noexcept :
     m_device{ device },
     m_hwnd{ hwnd },
-    m_dpi{ g_forceDpi ? g_forceDpi : GetDpiForWindow(hwnd) }
+    m_dpi{ m_forceDpi ? m_forceDpi : GetDpiForWindow(hwnd) }
 {
     InitWindowSize();
 
@@ -185,7 +183,7 @@ void DXWindowContext::OnDpiChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) noex
             RECT const newRect = *reinterpret_cast<RECT*>(lParam);
 
             // Save the new DPI.
-            context->m_dpi = g_forceDpi ? g_forceDpi : dpi;
+            context->m_dpi = m_forceDpi ? m_forceDpi : dpi;
 
             // If the D2D context exists, set its DPI.
             auto d2dContext = context->GetD2dContext();
