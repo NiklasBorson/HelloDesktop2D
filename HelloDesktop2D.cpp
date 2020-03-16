@@ -1,11 +1,6 @@
 ﻿#include "framework.h"
 #include "HelloDesktop2D.h"
 
-wchar_t const g_windowClass[] = L"wc_HelloDesktop2D";
-
-HWND CreateMainWindow(HINSTANCE hInstance);
-LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
-
 int APIENTRY wWinMain(
     _In_ HINSTANCE hInstance,
     _In_opt_ HINSTANCE hPrevInstance,
@@ -20,15 +15,9 @@ int APIENTRY wWinMain(
         ThrowLastError();
     }
 
-    // Create the main window.
-    HWND hwnd = CreateMainWindow(hInstance);
-
-    ShowWindow(hwnd, nCmdShow);
-
+    // Create the device and the main window.
     ComPtr<DXDevice> dxDevice{ new DXDevice{} };
-    ComPtr<HelloWorldWindow> windowContext{ new HelloWorldWindow{ dxDevice.Get(), hwnd } };
-
-    UpdateWindow(hwnd);
+    auto windowContext = HelloWorldWindow::Create(dxDevice.Get(), hInstance, nCmdShow);
 
     // Process messages until the main window is destroyed.
     MSG msg;
@@ -41,37 +30,98 @@ int APIENTRY wWinMain(
     return (int) msg.wParam;
 }
 
-HWND CreateMainWindow(HINSTANCE hInstance)
+HelloWorldWindow::HelloWorldWindow(DXDevice* device, HWND hwnd) :
+    DXWindowContext{ device, hwnd }
 {
-    constexpr uint32_t maxTitle = 100;
-    wchar_t appTitle[maxTitle];
+    // Add the text brush resource, so it will be initialized.
+    AddResource(&m_textBrush);
 
-    LoadStringW(hInstance, IDS_APP_TITLE, appTitle, maxTitle);
+    // Create the text layout object.
+    auto dwriteFactory = GetDWriteFactory();
 
-    WNDCLASSEXW wcex = {};
+    ComPtr<IDWriteTextFormat> textFormat;
+    HR(dwriteFactory->CreateTextFormat(
+        L"Segoe UI",
+        nullptr,
+        DWRITE_FONT_WEIGHT_NORMAL,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        10.0f,
+        L"en-us",
+        &textFormat
+    ));
 
-    wcex.cbSize = sizeof(WNDCLASSEX);
+    HR(textFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP));
 
-    wcex.style = CS_HREDRAW | CS_VREDRAW;
-    wcex.lpfnWndProc = MainWindowProc;
-    //wcex.cbClsExtra = 0;
-    //wcex.cbWndExtra = 0;
-    wcex.hInstance = hInstance;
-    wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_HELLODESKTOP2D));
-    wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-    //wcex.lpszMenuName = nullptr;
-    wcex.lpszClassName = g_windowClass;
-    wcex.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_SMALL));
+    constexpr uint32_t lineCount = 24;
+    m_textLines.reserve(lineCount);
 
-    ATOM classAtom = RegisterClassExW(&wcex);
-    if (classAtom == 0)
+    for (uint32_t i = 0; i < lineCount; i++)
     {
-        ThrowLastError();
+        TextLine textLine;
+
+        static wchar_t const text[] = L"Hello World! 😀";
+        constexpr uint32_t textLength = ARRAYSIZE(text) - 1;
+
+        HR(dwriteFactory->CreateTextLayout(
+            text,
+            textLength,
+            textFormat.Get(),
+            0,
+            0,
+            &textLine.textLayout
+        ));
+
+        HR(textLine.textLayout->SetFontSize(8.0f + i, DWRITE_TEXT_RANGE{ 0, textLength }));
+
+        DWRITE_TEXT_METRICS textMetrics;
+        HR(textLine.textLayout->GetMetrics(&textMetrics));
+
+        textLine.lineHeight = textMetrics.height;
+
+        m_textLines.push_back(std::move(textLine));
+    }
+}
+
+ComPtr<HelloWorldWindow> HelloWorldWindow::Create(DXDevice* device, HINSTANCE hInstance, int showCommand)
+{
+    wchar_t const className[] = L"HelloWorldWindow";
+
+    static bool isClassRegistered = false;
+
+    if (!isClassRegistered)
+    {
+        WNDCLASSEXW wcex = {};
+
+        wcex.cbSize = sizeof(WNDCLASSEX);
+
+        wcex.style = CS_HREDRAW | CS_VREDRAW;
+        wcex.lpfnWndProc = WindowProc;
+        //wcex.cbClsExtra = 0;
+        //wcex.cbWndExtra = 0;
+        wcex.hInstance = hInstance;
+        wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_HELLODESKTOP2D));
+        wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+        //wcex.lpszMenuName = nullptr;
+        wcex.lpszClassName = className;
+        wcex.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_SMALL));
+
+        ATOM classAtom = RegisterClassExW(&wcex);
+        if (classAtom == 0)
+        {
+            ThrowLastError();
+        }
+
+        isClassRegistered = true;
     }
 
+    constexpr uint32_t maxTitle = 100;
+    wchar_t appTitle[maxTitle];
+    LoadStringW(hInstance, IDS_APP_TITLE, appTitle, maxTitle);
+
     HWND hwnd = CreateWindowW(
-        g_windowClass, 
+        className,
         appTitle, 
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, 0, 
@@ -87,10 +137,16 @@ HWND CreateMainWindow(HINSTANCE hInstance)
         ThrowLastError();
     }
 
-    return hwnd;
+    ShowWindow(hwnd, showCommand);
+
+    ComPtr<HelloWorldWindow> windowContext{ new HelloWorldWindow{ device, hwnd } };
+
+    UpdateWindow(hwnd);
+
+    return windowContext;
 }
 
-LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK HelloWorldWindow::WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
     {
@@ -112,41 +168,6 @@ LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
     return 0;
 }
 
-HelloWorldWindow::HelloWorldWindow(DXDevice* device, HWND hwnd) :
-    DXWindowContext{ device, hwnd }
-{
-    // Add the text brush resource, so it will be initialized.
-    AddResource(&m_textBrush);
-
-    // Create the text layout object.
-    auto dwriteFactory = GetDWriteFactory();
-
-    ComPtr<IDWriteTextFormat> textFormat;
-    HR(dwriteFactory->CreateTextFormat(
-        L"Segoe UI",
-        nullptr,
-        DWRITE_FONT_WEIGHT_NORMAL,
-        DWRITE_FONT_STYLE_NORMAL,
-        DWRITE_FONT_STRETCH_NORMAL,
-        24.0f,
-        L"en-us",
-        &textFormat
-    ));
-
-    HR(textFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP));
-
-    static wchar_t const text[] = L"Hello World! 😀";
-
-    HR(dwriteFactory->CreateTextLayout(
-        text,
-        ARRAYSIZE(text) - 1,
-        textFormat.Get(),
-        0,
-        0,
-        &m_textLayout
-    ));
-}
-
 void HelloWorldWindow::RenderContent()
 {
     auto context = GetD2dContext();
@@ -154,11 +175,18 @@ void HelloWorldWindow::RenderContent()
     // Clear to white.
     context->Clear(D2D1_COLOR_F{ 1.0f, 1.0f, 1.0f, 1.0f });
 
-    // Draw the text.
-    context->DrawTextLayout(
-        D2D1_POINT_2F{ 10.0f, 10.0f },
-        m_textLayout.Get(),
-        m_textBrush.Get(),
-        D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT
+    // Draw the text lines.
+    D2D_POINT_2F textPos{ 10.0f, 10.0f };
+
+    for (auto& textLine : m_textLines)
+    {
+        context->DrawTextLayout(
+            textPos,
+            textLine.textLayout.Get(),
+            m_textBrush.Get(),
+            D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT
         );
+
+        textPos.y += textLine.lineHeight;
+    }
 }
