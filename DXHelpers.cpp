@@ -5,6 +5,8 @@
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 
+#pragma region Helpers
+
 [[noreturn]]
 void WinException::Throw(HRESULT hr)
 {
@@ -52,6 +54,10 @@ ULONG STDMETHODCALLTYPE ComObjectBase::Release()
     return newCount;
 }
 
+#pragma endregion // Helpers
+
+#pragma region Resources
+
 void ResourceList2D::ResetAll() noexcept
 {
     for (IResource2D* p : m_resources)
@@ -70,6 +76,24 @@ void ResourceList2D::EnsureInitialized(ID2D1DeviceContext6* device)
         }
     }
 }
+
+void SolidColorBrush::Initialize(ID2D1DeviceContext6* device)
+{
+    HR(device->CreateSolidColorBrush(m_color, m_ptr.ReleaseAndGetAddressOf()));
+}
+
+void SolidColorBrush::SetColor(D2D_COLOR_F newColor) noexcept
+{
+    if (m_ptr != nullptr)
+    {
+        m_ptr->SetColor(newColor);
+    }
+    m_color = newColor;
+}
+
+#pragma endregion // Resources
+
+#pragma region DXDevice
 
 ComPtr<ID2D1Factory7> DXDevice::CreateD2DFactory()
 {
@@ -134,22 +158,30 @@ void DXDevice::EnsureInitialized()
     m_generation++;
 }
 
+#pragma endregion // DXDevice
+
+#pragma region DXWindowContext
+
+uint32_t DXWindowContext::m_forceDpi = 0;
+
 DXWindowContext::DXWindowContext(DXDevice* device, HWND hwnd) noexcept :
     m_device{ device },
     m_hwnd{ hwnd },
-    m_dpi{ GetDpiForWindow(hwnd) }
+    m_pixelSize{ GetWindowSize(hwnd) },
+    m_dpi{ m_forceDpi ? m_forceDpi : GetDpiForWindow(hwnd) }
 {
-    InitWindowSize();
-
     SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<UINT_PTR>(this));
 }
 
-void DXWindowContext::InitWindowSize() noexcept
+D2D_SIZE_U DXWindowContext::GetWindowSize(HWND hwnd) noexcept
 {
     RECT clientRect;
-    GetClientRect(m_hwnd, &clientRect);
-    m_pixelWidth = std::max<int>(1, clientRect.right - clientRect.left);
-    m_pixelHeight = std::max<int>(1, clientRect.bottom - clientRect.top);
+    GetClientRect(hwnd, &clientRect);
+    return D2D_SIZE_U
+    {
+        std::max<uint32_t>(1, clientRect.right - clientRect.left),
+        std::max<uint32_t>(1, clientRect.bottom - clientRect.top)
+    };
 }
 
 void DXWindowContext::OnResize(HWND hwnd) noexcept
@@ -159,12 +191,30 @@ void DXWindowContext::OnResize(HWND hwnd) noexcept
     {
         try
         {
-            context->ResizeSwapChain();
+            context->OnResizeInternal();
         }
         catch (...)
         {
             std::terminate();
         }
+    }
+}
+
+void DXWindowContext::OnResizeInternal()
+{
+    D2D_SIZE_U newSize = GetWindowSize(m_hwnd);
+    if (newSize.width != m_pixelSize.width || newSize.height != m_pixelSize.height)
+    {
+        m_pixelSize = newSize;
+
+        // Free all resources associated with this window (but not the device).
+        ResetWindow();
+
+        // Recreate all resources.
+        EnsureInitialized();
+
+        // Call virtual method, so derived class can update its layout.
+        OnSizeChanged();
     }
 }
 
@@ -175,34 +225,13 @@ void DXWindowContext::OnDpiChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) noex
     {
         try
         {
-            // Unpack the parameters.
-            // WPARAM has horizontal and vertical DPI values, but they're always the same.
-            uint32_t const dpi = LOWORD(wParam);
-            RECT const newRect = *reinterpret_cast<RECT*>(lParam);
-
-            // Save the new DPI.
-            context->m_dpi = dpi;
-
-            // If the D2D context exists, set its DPI.
-            auto d2dContext = context->GetD2dContext();
-            if (d2dContext != nullptr)
-            {
-                d2dContext->SetDpi(static_cast<float>(dpi), static_cast<float>(dpi));
-            }
-
-            // Notify derived class of DPI change.
-            context->OnDpiChanged();
-
-            // Resize and resposition the window as specified.
-            SetWindowPos(
-                hwnd,
-                nullptr,
-                newRect.left,
-                newRect.top,
-                newRect.right - newRect.left,
-                newRect.bottom - newRect.top,
-                SWP_NOZORDER | SWP_NOACTIVATE
-                );
+            // The horizontal DPI is in LOWORD(wParam).
+            // The vertical DPI is in HIWORD(wParam) but always equals the horizontal DPI.
+            // LPARAM points to a RECT with the new window bounds.
+            context->OnDpiChangedInternal(
+                m_forceDpi ? m_forceDpi : LOWORD(wParam),
+                *reinterpret_cast<RECT*>(lParam)
+            );
         }
         catch (...)
         {
@@ -211,12 +240,88 @@ void DXWindowContext::OnDpiChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) noex
     }
 }
 
-void DXWindowContext::ResizeSwapChain()
+void DXWindowContext::OnDpiChangedInternal(uint32_t newDpi, RECT newRect)
 {
-    InitWindowSize();
-    ResetWindow();
+    if (newDpi != m_dpi)
+    {
+        // Save the new DPI.
+        m_dpi = newDpi;
+
+        // If the D2D context exists, set its DPI.
+        auto d2dContext = GetD2dContext();
+        if (d2dContext != nullptr)
+        {
+            d2dContext->SetDpi(static_cast<float>(newDpi), static_cast<float>(newDpi));
+        }
+
+        // Call virtual method, so derived class can update its layout.
+        OnDpiChanged();
+    }
+
+    // Set the new window bounds.
+    SetWindowPos(
+        m_hwnd,
+        nullptr,
+        newRect.left,
+        newRect.top,
+        newRect.right - newRect.left,
+        newRect.bottom - newRect.top,
+        SWP_NOZORDER | SWP_NOACTIVATE
+        );
+}
+
+void DXWindowContext::OnPaint(HWND hwnd) noexcept
+{
+    auto context = GetThis(hwnd);
+    if (context != nullptr)
+    {
+        try
+        {
+            PAINTSTRUCT ps;
+            BeginPaint(hwnd, &ps);
+
+            context->Paint();
+
+            EndPaint(hwnd, &ps);
+        }
+        catch (...)
+        {
+            std::terminate();
+        }
+    }
+    else
+    {
+        DefWindowProc(hwnd, WM_PAINT, 0, 0);
+    }
+}
+
+void DXWindowContext::Paint()
+{
+    try
+    {
+        PaintInternal();
+    }
+    catch (DeviceLostException&)
+    {
+        ResetDevice();
+        PaintInternal();
+    }
+}
+
+void DXWindowContext::PaintInternal()
+{
+    // Ensure device-dependent resources are initialized.
     EnsureInitialized();
-    OnSizeChanged();
+
+    // Begin drawing.
+    GetD2dContext()->BeginDraw();
+
+    // Call derived class method to render the window content.
+    RenderContent();
+
+    // End drawing and present.
+    HR(GetD2dContext()->EndDraw());
+    HR(m_swapChain->Present(0, 0));
 }
 
 void DXWindowContext::ResetWindow() noexcept
@@ -265,8 +370,8 @@ void DXWindowContext::EnsureInitialized()
 
     // Create a DXGI swap chain for the window.
     DXGI_SWAP_CHAIN_DESC scDesc = {};
-    scDesc.BufferDesc.Width = m_pixelWidth;
-    scDesc.BufferDesc.Height = m_pixelHeight;
+    scDesc.BufferDesc.Width = GetPixelWidth();
+    scDesc.BufferDesc.Height = GetPixelHeight();
     scDesc.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     scDesc.SampleDesc.Count = 1;
     scDesc.BufferUsage = DXGI_USAGE_BACK_BUFFER | DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -284,8 +389,8 @@ void DXWindowContext::EnsureInitialized()
 
     CD3D11_TEXTURE2D_DESC desc(
         DXGI_FORMAT_B8G8R8A8_UNORM,
-        m_pixelWidth, // width        
-        m_pixelHeight, // height     
+        GetPixelWidth(),
+        GetPixelHeight(),
         1, // arraySize 
         1, // mipLevels
         D3D11_BIND_RENDER_TARGET // bindFlags
@@ -324,70 +429,4 @@ void DXWindowContext::EnsureInitialized()
     m_d2dContext = std::move(d2dContext);
 }
 
-void DXWindowContext::PaintInternal()
-{
-    // Ensure device-dependent resources are initialized.
-    EnsureInitialized();
-
-    // Begin drawing.
-    GetD2dContext()->BeginDraw();
-
-    // Call derived class method to render the window content.
-    RenderContent();
-
-    // End drawing and present.
-    HR(GetD2dContext()->EndDraw());
-    HR(m_swapChain->Present(0, 0));
-}
-
-void DXWindowContext::Paint()
-{
-    try
-    {
-        PaintInternal();
-    }
-    catch (DeviceLostException&)
-    {
-        ResetDevice();
-        PaintInternal();
-    }
-}
-
-void DXWindowContext::OnPaint(HWND hwnd) noexcept
-{
-    auto context = GetThis(hwnd);
-    if (context != nullptr)
-    {
-        try
-        {
-            PAINTSTRUCT ps;
-            BeginPaint(hwnd, &ps);
-
-            context->Paint();
-
-            EndPaint(hwnd, &ps);
-        }
-        catch (...)
-        {
-            std::terminate();
-        }
-    }
-    else
-    {
-        DefWindowProc(hwnd, WM_PAINT, 0, 0);
-    }
-}
-
-void SolidColorBrush::Initialize(ID2D1DeviceContext6* device)
-{
-    HR(device->CreateSolidColorBrush(m_color, m_ptr.ReleaseAndGetAddressOf()));
-}
-
-void SolidColorBrush::SetColor(D2D_COLOR_F newColor) noexcept
-{
-    if (m_ptr != nullptr)
-    {
-        m_ptr->SetColor(newColor);
-    }
-    m_color = newColor;
-}
+#pragma endregion // DXWindowContext

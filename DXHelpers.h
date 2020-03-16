@@ -1,5 +1,7 @@
 #pragma once
 
+#pragma region Helpers
+
 using Microsoft::WRL::ComPtr;
 
 //
@@ -70,8 +72,13 @@ inline void HR(HRESULT hr)
     }
 }
 
+#pragma endregion // Helpers
+
+#pragma region Resources
+
 //
-// Abstract base class for device-dependent Direct2D resource.
+// IResource2D - interface for an object that encapsulates a Direct2D
+// device-dependent resource and can be added to a ResourceList2D.
 //
 class IResource2D
 {
@@ -79,7 +86,6 @@ public:
     IResource2D() noexcept {}
 
     // Abstract virtual methods.
-    virtual ~IResource2D() {}
     virtual void Initialize(ID2D1DeviceContext6* device) = 0;
     virtual bool IsInitialized() const noexcept = 0;
     virtual void Reset() noexcept = 0;
@@ -92,7 +98,7 @@ public:
 };
 
 //
-// Template helper that partially implements IResource2D.
+// Resource2DBase - partial implementation of IResource2D.
 //
 template<typename T>
 class Resource2DBase : public IResource2D
@@ -128,7 +134,40 @@ protected:
 };
 
 //
-// Collection of device-dependent Direct2D resources.
+// SolidColorBrush - Implementation of IResource2D for solid color brush.
+//
+class SolidColorBrush : public Resource2DBase<ID2D1SolidColorBrush>
+{
+public:
+    SolidColorBrush() noexcept : m_color{ 0, 0, 0, 1.0f }
+    {
+    }
+
+    SolidColorBrush(D2D_COLOR_F color) noexcept : m_color{ color }
+    {
+    }
+
+    SolidColorBrush(float r, float g, float b) : m_color{ r, g, b, 1.0f }
+    {
+    }
+
+    void Initialize(ID2D1DeviceContext6* device) override;
+
+    D2D_COLOR_F const& GetColor() const noexcept
+    {
+        return m_color;
+    }
+
+    void SetColor(D2D_COLOR_F newColor) noexcept;
+
+private:
+    D2D_COLOR_F m_color;
+};
+
+//
+// ResourceList2D - non-owning collection of Direct2D device-dependent
+// resources. Adding resources to a resource list ensures that they are
+// initialized before use and reset when necessary (e.g., on device lost).
 //
 class ResourceList2D
 {
@@ -145,8 +184,13 @@ private:
     std::vector<IResource2D*> m_resources;
 };
 
+#pragma endregion // Resources
+
+#pragma region DX_Context
+
 //
-// DirectX device.
+// DXDevice - encapsulates a D3D device, which can be shared by
+// multiple window contexts.
 //
 class DXDevice : public ComObjectBase
 {
@@ -204,7 +248,8 @@ private:
 };
 
 //
-// Device context for a window.
+// DXWindowContext - manages a swap chain and Direct2D device context
+// for a window.
 //
 class DXWindowContext : public ComObjectBase
 {
@@ -214,34 +259,36 @@ public:
     void Paint();
 
     // Static methods for handling window messages.
-    static void OnPaint(HWND hwnd) noexcept;
     static void OnResize(HWND hwnd) noexcept;
     static void OnDpiChanged(HWND hwnd, WPARAM wParam, LPARAM lParam) noexcept;
+    static void OnPaint(HWND hwnd) noexcept;
 
     static DXWindowContext* GetThis(HWND hwnd) noexcept
     {
         return reinterpret_cast<DXWindowContext*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
     }
 
+    static D2D_SIZE_U GetWindowSize(HWND hwnd) noexcept;
+
     // Getters.
     uint32_t GetPixelWidth() const noexcept
     {
-        return m_pixelWidth;
+        return m_pixelSize.width;
     }
 
     uint32_t GetPixelHeight() const noexcept
     {
-        return m_pixelHeight;
+        return m_pixelSize.height;
     }
 
     float GetWidthDips() const noexcept
     {
-        return m_pixelWidth * (96.0f / m_dpi);
+        return GetPixelWidth() * (96.0f / m_dpi);
     }
 
     float GetHeightDips() const noexcept
     {
-        return m_pixelHeight * (96.0f / m_dpi);
+        return GetPixelHeight() * (96.0f / m_dpi);
     }
 
     ID2D1Factory7* GetD2dFactory() const noexcept
@@ -257,6 +304,11 @@ public:
     ID2D1DeviceContext6* GetD2dContext() const noexcept
     {
         return m_d2dContext.Get();
+    }
+
+    static void ForceDpi(uint16_t dpi) noexcept
+    {
+        m_forceDpi = dpi;
     }
 
 protected:
@@ -280,9 +332,10 @@ protected:
     }
 
 private:
-    void InitWindowSize() noexcept;
 
-    void ResizeSwapChain();
+    // Internal message handlers.
+    void OnResizeInternal();
+    void OnDpiChangedInternal(uint32_t newDpi, RECT newRect);
 
     void ResetWindow() noexcept;
     void ResetDevice() noexcept;
@@ -294,9 +347,10 @@ private:
     uint32_t m_deviceGeneration = 0;
 
     HWND m_hwnd = nullptr;
-    uint32_t m_pixelWidth = 1;
-    uint32_t m_pixelHeight = 1;
+    D2D_SIZE_U m_pixelSize = {};
     uint32_t m_dpi = 96;
+
+    static uint32_t m_forceDpi;
 
     ComPtr<IDXGISwapChain> m_swapChain;
     ComPtr<ID2D1DeviceContext6> m_d2dContext;
@@ -304,34 +358,4 @@ private:
     ResourceList2D m_resourceList;
 };
 
-
-//
-// Solid color brush.
-//
-class SolidColorBrush : public Resource2DBase<ID2D1SolidColorBrush>
-{
-public:
-    SolidColorBrush() noexcept : m_color{ 0, 0, 0, 1.0f }
-    {
-    }
-
-    SolidColorBrush(D2D_COLOR_F color) noexcept : m_color{ color }
-    {
-    }
-
-    SolidColorBrush(float r, float g, float b) : m_color{ r, g, b, 1.0f }
-    {
-    }
-
-    void Initialize(ID2D1DeviceContext6* device) override;
-
-    D2D_COLOR_F const& GetColor() const noexcept
-    {
-        return m_color;
-    }
-
-    void SetColor(D2D_COLOR_F newColor) noexcept;
-
-private:
-    D2D_COLOR_F m_color;
-};
+#pragma endregion // DX_Context
