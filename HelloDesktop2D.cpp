@@ -8,13 +8,6 @@ int APIENTRY wWinMain(
     _In_ int nCmdShow
 )
 {
-    // Programmatically declare this process is DPI-aware.
-    // This must be done before any windows are created, or anything else that depends on DPI.
-    if (!SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT{ DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 }))
-    {
-        ThrowLastError();
-    }
-
     // Process command-line option to force 96 DPI.
     if (wcscmp(lpCmdLine, L"-96") == 0)
     {
