@@ -6,7 +6,7 @@
 class HelloWorldWindow : public DXWindowContext
 {
 public:
-    static ComPtr<HelloWorldWindow> Create(DXDevice* device, HINSTANCE hInstance, int showCommand);
+    static wil::com_ptr<HelloWorldWindow> Create(DXDevice* device, HINSTANCE hInstance, int showCommand);
 
 private:
     HelloWorldWindow(DXDevice* device, HWND hwnd);
@@ -17,7 +17,7 @@ private:
 
     struct TextLine
     {
-        ComPtr<IDWriteTextLayout> textLayout;
+        wil::com_ptr<IDWriteTextLayout> textLayout;
         float lineHeight;
     };
 

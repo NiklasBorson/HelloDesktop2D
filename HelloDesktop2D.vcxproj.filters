@@ -57,4 +57,7 @@
       <Filter>Resource Files</Filter>
     </Manifest>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
 </Project>

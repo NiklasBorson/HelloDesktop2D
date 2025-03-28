@@ -2,8 +2,6 @@
 
 #pragma region Helpers
 
-using Microsoft::WRL::ComPtr;
-
 //
 // Base class with trivial implementation of IUnknown methods.
 //
@@ -121,16 +119,16 @@ public:
     // Trivial getters.
     T* Get() const noexcept
     {
-        return m_ptr.Get();
+        return m_ptr.get();
     }
 
     T* operator->() const noexcept
     {
-        return m_ptr.Get();
+        return m_ptr.get();
     }
 
 protected:
-    ComPtr<T> m_ptr;
+    wil::com_ptr<T> m_ptr;
 };
 
 //
@@ -206,27 +204,27 @@ public:
 
     ID2D1Factory7* GetD2dFactory() const noexcept
     {
-        return m_d2dFactory.Get();
+        return m_d2dFactory.get();
     }
 
     IDWriteFactory7* GetDWriteFactory() const noexcept
     {
-        return m_dwriteFactory.Get();
+        return m_dwriteFactory.get();
     }
 
     ID3D11DeviceContext* GetD3dContext() const noexcept
     {
-        return m_d3dContext.Get();
+        return m_d3dContext.get();
     }
 
     IDXGIDevice* GetDxgiDevice() const noexcept
     {
-        return m_dxgiDevice.Get();
+        return m_dxgiDevice.get();
     }
 
     ID2D1Device6* GetD2dDevice() const noexcept
     {
-        return m_d2dDevice.Get();
+        return m_d2dDevice.get();
     }
 
     uint32_t GetGeneration() const noexcept
@@ -235,15 +233,15 @@ public:
     }
 
 private:
-    static ComPtr<ID2D1Factory7> CreateD2DFactory();
-    static ComPtr<IDWriteFactory7> CreateDWriteFactory();
+    static wil::com_ptr<ID2D1Factory7> CreateD2DFactory();
+    static wil::com_ptr<IDWriteFactory7> CreateDWriteFactory();
 
-    const ComPtr<ID2D1Factory7> m_d2dFactory = CreateD2DFactory();
-    const ComPtr<IDWriteFactory7> m_dwriteFactory = CreateDWriteFactory();
+    const wil::com_ptr<ID2D1Factory7> m_d2dFactory = CreateD2DFactory();
+    const wil::com_ptr<IDWriteFactory7> m_dwriteFactory = CreateDWriteFactory();
 
-    ComPtr<ID3D11DeviceContext> m_d3dContext;
-    ComPtr<IDXGIDevice> m_dxgiDevice;
-    ComPtr<ID2D1Device6> m_d2dDevice;
+    wil::com_ptr<ID3D11DeviceContext> m_d3dContext;
+    wil::com_ptr<IDXGIDevice> m_dxgiDevice;
+    wil::com_ptr<ID2D1Device6> m_d2dDevice;
     uint32_t m_generation = 0;
 };
 
@@ -303,7 +301,7 @@ public:
 
     ID2D1DeviceContext6* GetD2dContext() const noexcept
     {
-        return m_d2dContext.Get();
+        return m_d2dContext.get();
     }
 
     static void ForceDpi(uint16_t dpi) noexcept
@@ -343,7 +341,7 @@ private:
     void EnsureInitialized();
     void PaintInternal();
 
-    const ComPtr<DXDevice> m_device;
+    const wil::com_ptr<DXDevice> m_device;
     uint32_t m_deviceGeneration = 0;
 
     HWND m_hwnd = nullptr;
@@ -352,8 +350,8 @@ private:
 
     static uint32_t m_forceDpi;
 
-    ComPtr<IDXGISwapChain> m_swapChain;
-    ComPtr<ID2D1DeviceContext6> m_d2dContext;
+    wil::com_ptr<IDXGISwapChain> m_swapChain;
+    wil::com_ptr<ID2D1DeviceContext6> m_d2dContext;
 
     ResourceList2D m_resourceList;
 };

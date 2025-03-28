@@ -3,15 +3,18 @@
 #include "targetver.h"
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
-// Windows Header Files
+// Windows header files
 #include <windows.h>
 #include <dwrite_3.h>
 #include <d3d11_4.h>
 #include <d2d1_3.h>
 #include <d2d1_3helper.h>
-#include <wrl/client.h>
 
-// C RunTime Header Files
+// WIL header files
+#include <wil/resource.h>
+#include <wil/com.h>
+
+// C runtime header files
 #include <stdlib.h>
 #include <malloc.h>
 #include <memory.h>
