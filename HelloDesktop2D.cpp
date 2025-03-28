@@ -15,8 +15,8 @@ int APIENTRY wWinMain(
     }
 
     // Create the device and the main window.
-    ComPtr<DXDevice> dxDevice{ new DXDevice{} };
-    auto windowContext = HelloWorldWindow::Create(dxDevice.Get(), hInstance, nCmdShow);
+    wil::com_ptr<DXDevice> dxDevice{ new DXDevice{} };
+    auto windowContext = HelloWorldWindow::Create(dxDevice.get(), hInstance, nCmdShow);
 
     // Process messages until the main window is destroyed.
     MSG msg;
@@ -29,7 +29,7 @@ int APIENTRY wWinMain(
     return (int) msg.wParam;
 }
 
-ComPtr<HelloWorldWindow> HelloWorldWindow::Create(DXDevice* device, HINSTANCE hInstance, int showCommand)
+wil::com_ptr<HelloWorldWindow> HelloWorldWindow::Create(DXDevice* device, HINSTANCE hInstance, int showCommand)
 {
     wchar_t const className[] = L"HelloWorldWindow";
 
@@ -54,10 +54,7 @@ ComPtr<HelloWorldWindow> HelloWorldWindow::Create(DXDevice* device, HINSTANCE hI
         wcex.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_SMALL));
 
         ATOM classAtom = RegisterClassExW(&wcex);
-        if (classAtom == 0)
-        {
-            ThrowLastError();
-        }
+        THROW_LAST_ERROR_IF(classAtom == 0);
 
         isClassRegistered = true;
     }
@@ -79,16 +76,12 @@ ComPtr<HelloWorldWindow> HelloWorldWindow::Create(DXDevice* device, HINSTANCE hI
         hInstance,
         nullptr
     );
-
-    if (hwnd == nullptr)
-    {
-        ThrowLastError();
-    }
+    THROW_LAST_ERROR_IF_NULL(hwnd);
 
     // Show the window, so it has a size when we create the window context.
     ShowWindow(hwnd, showCommand);
 
-    ComPtr<HelloWorldWindow> windowContext{ new HelloWorldWindow{ device, hwnd } };
+    wil::com_ptr<HelloWorldWindow> windowContext{ new HelloWorldWindow{ device, hwnd } };
 
     UpdateWindow(hwnd);
 
@@ -104,8 +97,8 @@ HelloWorldWindow::HelloWorldWindow(DXDevice* device, HWND hwnd) :
     // Create the text layout object.
     auto dwriteFactory = GetDWriteFactory();
 
-    ComPtr<IDWriteTextFormat> textFormat;
-    HR(dwriteFactory->CreateTextFormat(
+    wil::com_ptr<IDWriteTextFormat> textFormat;
+    THROW_IF_FAILED(dwriteFactory->CreateTextFormat(
         L"Segoe UI",
         nullptr,
         DWRITE_FONT_WEIGHT_NORMAL,
@@ -113,10 +106,10 @@ HelloWorldWindow::HelloWorldWindow(DXDevice* device, HWND hwnd) :
         DWRITE_FONT_STRETCH_NORMAL,
         10.0f,
         L"en-us",
-        &textFormat
+        textFormat.put()
     ));
 
-    HR(textFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP));
+    THROW_IF_FAILED(textFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP));
 
     constexpr uint32_t lineCount = 24;
     m_textLines.reserve(lineCount);
@@ -128,19 +121,19 @@ HelloWorldWindow::HelloWorldWindow(DXDevice* device, HWND hwnd) :
         static wchar_t const text[] = L"Hello World! 😀";
         constexpr uint32_t textLength = ARRAYSIZE(text) - 1;
 
-        HR(dwriteFactory->CreateTextLayout(
+        THROW_IF_FAILED(dwriteFactory->CreateTextLayout(
             text,
             textLength,
-            textFormat.Get(),
+            textFormat.get(),
             0,
             0,
-            &textLine.textLayout
+            textLine.textLayout.put()
         ));
 
-        HR(textLine.textLayout->SetFontSize(8.0f + i, DWRITE_TEXT_RANGE{ 0, textLength }));
+        THROW_IF_FAILED(textLine.textLayout->SetFontSize(8.0f + i, DWRITE_TEXT_RANGE{ 0, textLength }));
 
         DWRITE_TEXT_METRICS textMetrics;
-        HR(textLine.textLayout->GetMetrics(&textMetrics));
+        THROW_IF_FAILED(textLine.textLayout->GetMetrics(&textMetrics));
 
         textLine.lineHeight = textMetrics.height;
 
@@ -184,7 +177,7 @@ void HelloWorldWindow::RenderContent()
     {
         context->DrawTextLayout(
             textPos,
-            textLine.textLayout.Get(),
+            textLine.textLayout.get(),
             m_textBrush.Get(),
             D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT
         );

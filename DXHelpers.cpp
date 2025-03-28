@@ -7,21 +7,6 @@
 
 #pragma region Helpers
 
-[[noreturn]]
-void WinException::Throw(HRESULT hr)
-{
-    // Throw appropriate exception type depending on error.
-    switch (hr)
-    {
-    case D2DERR_RECREATE_TARGET:
-    case DXGI_ERROR_DEVICE_REMOVED:
-        throw DeviceLostException{ hr };
-
-    default:
-        throw WinException{ hr };
-    }
-}
-
 HRESULT STDMETHODCALLTYPE ComObjectBase::QueryInterface(REFIID riid, _COM_Outptr_ void** ppvObject)
 {
     if (riid == __uuidof(IUnknown))
@@ -79,7 +64,7 @@ void ResourceList2D::EnsureInitialized(ID2D1DeviceContext6* device)
 
 void SolidColorBrush::Initialize(ID2D1DeviceContext6* device)
 {
-    HR(device->CreateSolidColorBrush(m_color, m_ptr.ReleaseAndGetAddressOf()));
+    THROW_IF_FAILED(device->CreateSolidColorBrush(m_color, m_ptr.put()));
 }
 
 void SolidColorBrush::SetColor(D2D_COLOR_F newColor) noexcept
@@ -95,29 +80,25 @@ void SolidColorBrush::SetColor(D2D_COLOR_F newColor) noexcept
 
 #pragma region DXDevice
 
-ComPtr<ID2D1Factory7> DXDevice::CreateD2DFactory()
+wil::com_ptr<ID2D1Factory7> DXDevice::CreateD2DFactory()
 {
-    ComPtr<ID2D1Factory7> ptr;
-    HR(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, ptr.GetAddressOf()));
+    wil::com_ptr<ID2D1Factory7> ptr;
+    THROW_IF_FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, ptr.put()));
     return ptr;
 }
 
-ComPtr<IDWriteFactory7> DXDevice::CreateDWriteFactory()
+wil::com_ptr<IDWriteFactory7> DXDevice::CreateDWriteFactory()
 {
-    ComPtr<IDWriteFactory7> ptr;
-    HR(DWriteCreateFactory(
-        DWRITE_FACTORY_TYPE_SHARED,
-        __uuidof(IDWriteFactory7),
-        reinterpret_cast<IUnknown**>(ptr.GetAddressOf())
-    ));
+    wil::com_ptr<IDWriteFactory7> ptr;
+    THROW_IF_FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory7), ptr.put_unknown()));
     return ptr;
 }
 
 void DXDevice::Reset() noexcept
 {
-    m_d3dContext.Reset();
-    m_dxgiDevice.Reset();
-    m_d2dDevice.Reset();
+    m_d3dContext.reset();
+    m_dxgiDevice.reset();
+    m_d2dDevice.reset();
 }
 
 void DXDevice::EnsureInitialized()
@@ -128,9 +109,9 @@ void DXDevice::EnsureInitialized()
     }
 
     // Create the D3D device.
-    ComPtr<ID3D11Device> d3dDevice;
-    ComPtr<ID3D11DeviceContext> d3dContext;
-    HR(D3D11CreateDevice(
+    wil::com_ptr<ID3D11Device> d3dDevice;
+    wil::com_ptr<ID3D11DeviceContext> d3dContext;
+    THROW_IF_FAILED(D3D11CreateDevice(
         nullptr, // use the default adapter
         D3D_DRIVER_TYPE_HARDWARE,
         nullptr, // leave as null if hardware is used
@@ -138,18 +119,18 @@ void DXDevice::EnsureInitialized()
         nullptr, // levels
         0,
         D3D11_SDK_VERSION,
-        &d3dDevice,
+        d3dDevice.put(),
         nullptr,
-        &d3dContext
+        d3dContext.put()
         ));
 
     // Get the D3D device as a DXGI device.
-    ComPtr<IDXGIDevice> dxgiDevice;
-    HR(d3dDevice->QueryInterface(dxgiDevice.GetAddressOf()));
+    wil::com_ptr<IDXGIDevice> dxgiDevice;
+    THROW_IF_FAILED(d3dDevice->QueryInterface(dxgiDevice.put()));
 
     // Create the D2D device.
-    ComPtr<ID2D1Device6> d2dDevice;
-    m_d2dFactory->CreateDevice(dxgiDevice.Get(), d2dDevice.GetAddressOf());
+    wil::com_ptr<ID2D1Device6> d2dDevice;
+    m_d2dFactory->CreateDevice(dxgiDevice.get(), d2dDevice.put());
 
     // Initialize members.
     m_d3dContext = std::move(d3dContext);
@@ -301,10 +282,19 @@ void DXWindowContext::Paint()
     {
         PaintInternal();
     }
-    catch (DeviceLostException&)
+    catch (wil::ResultException& e)
     {
-        ResetDevice();
-        PaintInternal();
+        switch (e.GetErrorCode())
+        {
+            case D2DERR_RECREATE_TARGET:
+            case DXGI_ERROR_DEVICE_REMOVED:
+                ResetDevice();
+                PaintInternal();
+                break;
+
+            default:
+                throw;
+        }
     }
 }
 
@@ -320,14 +310,14 @@ void DXWindowContext::PaintInternal()
     RenderContent();
 
     // End drawing and present.
-    HR(GetD2dContext()->EndDraw());
-    HR(m_swapChain->Present(0, 0));
+    THROW_IF_FAILED(GetD2dContext()->EndDraw());
+    THROW_IF_FAILED(m_swapChain->Present(0, 0));
 }
 
 void DXWindowContext::ResetWindow() noexcept
 {
-    m_d2dContext.Reset();
-    m_swapChain.Reset();
+    m_d2dContext.reset();
+    m_swapChain.reset();
 }
 
 void DXWindowContext::ResetDevice() noexcept
@@ -352,7 +342,7 @@ void DXWindowContext::EnsureInitialized()
     // D2D resources are initialized.
     if (m_d2dContext != nullptr)
     {
-        m_resourceList.EnsureInitialized(m_d2dContext.Get());
+        m_resourceList.EnsureInitialized(m_d2dContext.get());
         return;
     }
 
@@ -362,11 +352,11 @@ void DXWindowContext::EnsureInitialized()
 
     // Get the DXGI factory.
     auto dxgiDevice = m_device->GetDxgiDevice();
-    ComPtr<IDXGIAdapter> dxgiAdapter;
-    HR(dxgiDevice->GetAdapter(&dxgiAdapter));
+    wil::com_ptr<IDXGIAdapter> dxgiAdapter;
+    THROW_IF_FAILED(dxgiDevice->GetAdapter(&dxgiAdapter));
 
-    ComPtr<IDXGIFactory> dxgiFactory;
-    HR(dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory)));
+    wil::com_ptr<IDXGIFactory> dxgiFactory;
+    THROW_IF_FAILED(dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory)));
 
     // Create a DXGI swap chain for the window.
     DXGI_SWAP_CHAIN_DESC scDesc = {};
@@ -380,12 +370,8 @@ void DXWindowContext::EnsureInitialized()
     scDesc.Windowed = true;
     scDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 
-    ComPtr<IDXGISwapChain> dxgiSwapChain;
-    HR(dxgiFactory->CreateSwapChain(
-        dxgiDevice,
-        &scDesc,
-        dxgiSwapChain.GetAddressOf()
-    ));
+    wil::com_ptr<IDXGISwapChain> dxgiSwapChain;
+    THROW_IF_FAILED(dxgiFactory->CreateSwapChain(dxgiDevice, &scDesc, dxgiSwapChain.put()));
 
     CD3D11_TEXTURE2D_DESC desc(
         DXGI_FORMAT_B8G8R8A8_UNORM,
@@ -397,32 +383,32 @@ void DXWindowContext::EnsureInitialized()
     );
 
     // Get the DXGI surface for the swap chain.
-    ComPtr<IDXGISurface> dxgiSurface;
-    HR(dxgiSwapChain->GetBuffer(0, IID_PPV_ARGS(&dxgiSurface)));
+    wil::com_ptr<IDXGISurface> dxgiSurface;
+    THROW_IF_FAILED(dxgiSwapChain->GetBuffer(0, IID_PPV_ARGS(dxgiSurface.put())));
 
     // Create the D2D context.
     auto d2dDevice = m_device->GetD2dDevice();
-    ComPtr<ID2D1DeviceContext6> d2dContext;
-    HR(d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &d2dContext));
+    wil::com_ptr<ID2D1DeviceContext6> d2dContext;
+    THROW_IF_FAILED(d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, d2dContext.put()));
 
     // Set the DPI.
     d2dContext->SetDpi(static_cast<float>(m_dpi), static_cast<float>(m_dpi));
 
     // Create a D2D bitmap from the swap chain surface, and set it as the target.
-    ComPtr<ID2D1Bitmap1> d2dBitmap;
-    HR(d2dContext->CreateBitmapFromDxgiSurface(
-        dxgiSurface.Get(),
+    wil::com_ptr<ID2D1Bitmap1> d2dBitmap;
+    THROW_IF_FAILED(d2dContext->CreateBitmapFromDxgiSurface(
+        dxgiSurface.get(),
         D2D1::BitmapProperties1(
             D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
             D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)
         ),
-        &d2dBitmap
+        d2dBitmap.put()
     ));
 
-    d2dContext->SetTarget(d2dBitmap.Get());
+    d2dContext->SetTarget(d2dBitmap.get());
 
     // Initialize device-dependent resources.
-    m_resourceList.EnsureInitialized(d2dContext.Get());
+    m_resourceList.EnsureInitialized(d2dContext.get());
 
     // Update members.
     m_swapChain = std::move(dxgiSwapChain);
