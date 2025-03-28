@@ -28,48 +28,6 @@ private:
     uint32_t m_refCount = 0;
 };
 
-//
-// Error handling helpers.
-//
-class WinException
-{
-public:
-    WinException(HRESULT hr) noexcept : m_hr(hr)
-    {
-    }
-
-    HRESULT GetError() const noexcept
-    {
-        return m_hr;
-    }
-
-    [[noreturn]]
-    static void Throw(HRESULT hr);
-
-private:
-    HRESULT m_hr;
-};
-
-class DeviceLostException : public WinException
-{
-public:
-    using WinException::WinException;
-};
-
-inline void ThrowLastError()
-{
-    DWORD err = GetLastError();
-    throw WinException{ HRESULT_FROM_WIN32(err) };
-}
-
-inline void HR(HRESULT hr)
-{
-    if (FAILED(hr))
-    {
-        WinException::Throw(hr);
-    }
-}
-
 #pragma endregion // Helpers
 
 #pragma region Resources

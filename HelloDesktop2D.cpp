@@ -54,10 +54,7 @@ wil::com_ptr<HelloWorldWindow> HelloWorldWindow::Create(DXDevice* device, HINSTA
         wcex.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_SMALL));
 
         ATOM classAtom = RegisterClassExW(&wcex);
-        if (classAtom == 0)
-        {
-            ThrowLastError();
-        }
+        THROW_LAST_ERROR_IF(classAtom == 0);
 
         isClassRegistered = true;
     }
@@ -79,11 +76,7 @@ wil::com_ptr<HelloWorldWindow> HelloWorldWindow::Create(DXDevice* device, HINSTA
         hInstance,
         nullptr
     );
-
-    if (hwnd == nullptr)
-    {
-        ThrowLastError();
-    }
+    THROW_LAST_ERROR_IF_NULL(hwnd);
 
     // Show the window, so it has a size when we create the window context.
     ShowWindow(hwnd, showCommand);
@@ -105,7 +98,7 @@ HelloWorldWindow::HelloWorldWindow(DXDevice* device, HWND hwnd) :
     auto dwriteFactory = GetDWriteFactory();
 
     wil::com_ptr<IDWriteTextFormat> textFormat;
-    HR(dwriteFactory->CreateTextFormat(
+    THROW_IF_FAILED(dwriteFactory->CreateTextFormat(
         L"Segoe UI",
         nullptr,
         DWRITE_FONT_WEIGHT_NORMAL,
@@ -113,10 +106,10 @@ HelloWorldWindow::HelloWorldWindow(DXDevice* device, HWND hwnd) :
         DWRITE_FONT_STRETCH_NORMAL,
         10.0f,
         L"en-us",
-        &textFormat
+        textFormat.put()
     ));
 
-    HR(textFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP));
+    THROW_IF_FAILED(textFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP));
 
     constexpr uint32_t lineCount = 24;
     m_textLines.reserve(lineCount);
@@ -128,7 +121,7 @@ HelloWorldWindow::HelloWorldWindow(DXDevice* device, HWND hwnd) :
         static wchar_t const text[] = L"Hello World! 😀";
         constexpr uint32_t textLength = ARRAYSIZE(text) - 1;
 
-        HR(dwriteFactory->CreateTextLayout(
+        THROW_IF_FAILED(dwriteFactory->CreateTextLayout(
             text,
             textLength,
             textFormat.get(),
@@ -137,10 +130,10 @@ HelloWorldWindow::HelloWorldWindow(DXDevice* device, HWND hwnd) :
             textLine.textLayout.put()
         ));
 
-        HR(textLine.textLayout->SetFontSize(8.0f + i, DWRITE_TEXT_RANGE{ 0, textLength }));
+        THROW_IF_FAILED(textLine.textLayout->SetFontSize(8.0f + i, DWRITE_TEXT_RANGE{ 0, textLength }));
 
         DWRITE_TEXT_METRICS textMetrics;
-        HR(textLine.textLayout->GetMetrics(&textMetrics));
+        THROW_IF_FAILED(textLine.textLayout->GetMetrics(&textMetrics));
 
         textLine.lineHeight = textMetrics.height;
 
